@@ -19,10 +19,36 @@ export default function MoreScreen() {
   const clearActivePartner = useMockStore((s) => s.clearActivePartner);
   const resetToSeed = useMockStore((s) => s.resetToSeed);
   const students = useMockStore((s) => s.students);
+  const isTeacher = useMockStore((s) => s.isTeacher());
 
   const fees = feeBy();
   const exps = expBy();
   const net = monthNet();
+  const partnerOnly = partners.filter((p) => p.role === 'partner');
+
+  if (isTeacher) {
+    return (
+      <Screen>
+        <ScrollView contentContainerStyle={{ paddingBottom: 48 }}>
+          <Title>Teacher account</Title>
+          <Subtitle>You can take attendance only</Subtitle>
+          <Card>
+            <Text style={styles.meta}>
+              Fees, expenses, student edits, and money reports are for partners. Use Switch to
+              change who is logged in.
+            </Text>
+          </Card>
+          <PrimaryButton
+            title="Switch user"
+            onPress={() => {
+              clearActivePartner();
+              router.replace('/login');
+            }}
+          />
+        </ScrollView>
+      </Screen>
+    );
+  }
 
   return (
     <Screen>
@@ -50,7 +76,7 @@ export default function MoreScreen() {
 
         <Card>
           <Text style={styles.section}>By partner</Text>
-          {partners.map((p) => (
+          {partnerOnly.map((p) => (
             <View key={p.id} style={styles.partnerRow}>
               <View style={[styles.dot, { backgroundColor: p.color }]} />
               <View style={{ flex: 1 }}>
@@ -65,16 +91,19 @@ export default function MoreScreen() {
 
         <Card>
           <Text style={styles.section}>School snapshot</Text>
-          <Text style={styles.meta}>{students.length} students · {partners.length} partners</Text>
+          <Text style={styles.meta}>
+            {students.length} students · {partnerOnly.length} partners · teachers take attendance
+            only
+          </Text>
           <Text style={[styles.meta, { marginTop: 8 }]}>
             Finance rule: any partner may collect from any student and spend on any school
-            expense. Every movement records partner_id, amount, method, timestamp. Soft-delete
+            expense. Every movement records who acted, amount, method, timestamp. Soft-delete
             only via void + reason.
           </Text>
         </Card>
 
         <PrimaryButton
-          title="Switch partner"
+          title="Switch user"
           onPress={() => {
             clearActivePartner();
             router.replace('/login');
@@ -91,7 +120,7 @@ export default function MoreScreen() {
                 style: 'destructive',
                 onPress: () => {
                   resetToSeed();
-                  Alert.alert('Done', 'Seed data restored. Pick a partner again.');
+                  Alert.alert('Done', 'Seed data restored. Pick a user again.');
                   clearActivePartner();
                   router.replace('/login');
                 },

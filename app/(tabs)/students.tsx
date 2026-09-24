@@ -5,11 +5,21 @@ import { useMockStore } from '../../src/store/mockStore';
 import { formatINR } from '../../src/lib/format';
 
 export default function StudentsScreen() {
+  const isTeacher = useMockStore((s) => s.isTeacher());
   const router = useRouter();
   const students = useMockStore((s) => s.students);
   const sorted = [...students].sort((a, b) =>
     a.className.localeCompare(b.className) || a.name.localeCompare(b.name)
   );
+
+  if (isTeacher) {
+    return (
+      <Screen>
+        <Title>Students locked</Title>
+        <Subtitle>Teachers can only take attendance.</Subtitle>
+      </Screen>
+    );
+  }
 
   return (
     <Screen>

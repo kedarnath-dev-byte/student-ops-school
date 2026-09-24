@@ -2,8 +2,11 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { PartnerBanner } from '../../src/components/PartnerBanner';
 import { View } from 'react-native';
+import { useMockStore } from '../../src/store/mockStore';
 
 export default function TabsLayout() {
+  const isTeacher = useMockStore((s) => s.isTeacher());
+
   return (
     <View style={{ flex: 1 }}>
       <PartnerBanner />
@@ -29,6 +32,7 @@ export default function TabsLayout() {
           name="students"
           options={{
             title: 'Students',
+            href: isTeacher ? null : undefined,
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="people-outline" size={size} color={color} />
             ),
@@ -38,6 +42,7 @@ export default function TabsLayout() {
           name="fees"
           options={{
             title: 'Fees',
+            href: isTeacher ? null : undefined,
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="cash-outline" size={size} color={color} />
             ),
@@ -47,6 +52,7 @@ export default function TabsLayout() {
           name="expenses"
           options={{
             title: 'Expenses',
+            href: isTeacher ? null : undefined,
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="wallet-outline" size={size} color={color} />
             ),
@@ -55,7 +61,7 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="more"
           options={{
-            title: 'More',
+            title: isTeacher ? 'Account' : 'More',
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="ellipsis-horizontal-circle-outline" size={size} color={color} />
             ),

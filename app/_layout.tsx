@@ -56,6 +56,18 @@ export default function RootLayout() {
           name="students/[id]"
           options={{ headerShown: true, title: 'Student' }}
         />
+        <Stack.Screen
+          name="teachers/add"
+          options={{ headerShown: true, title: 'Add Teacher', presentation: 'modal' }}
+        />
+        <Stack.Screen
+          name="reports/index"
+          options={{ headerShown: true, title: 'Money reports' }}
+        />
+        <Stack.Screen
+          name="salaries/index"
+          options={{ headerShown: true, title: 'Salaries' }}
+        />
       </Stack>
     </AuthGate>
   );

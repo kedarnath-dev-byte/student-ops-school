@@ -19,12 +19,15 @@ export default function MoreScreen() {
   const clearActivePartner = useMockStore((s) => s.clearActivePartner);
   const resetToSeed = useMockStore((s) => s.resetToSeed);
   const students = useMockStore((s) => s.students);
+  const employees = useMockStore((s) => s.employees);
   const isTeacher = useMockStore((s) => s.isTeacher());
 
   const fees = feeBy();
   const exps = expBy();
   const net = monthNet();
   const partnerOnly = partners.filter((p) => p.role === 'partner');
+  const teachers = partners.filter((p) => p.role === 'teacher');
+  const activeEmployees = employees.filter((e) => e.active);
 
   if (isTeacher) {
     return (
@@ -34,8 +37,8 @@ export default function MoreScreen() {
           <Subtitle>You can take attendance only</Subtitle>
           <Card>
             <Text style={styles.meta}>
-              Fees, expenses, student edits, and money reports are for partners. Use Switch to
-              change who is logged in.
+              Fees, expenses, student edits, salaries, tests, and money reports are for partners.
+              Use Switch to change who is logged in.
             </Text>
           </Card>
           <PrimaryButton
@@ -55,6 +58,22 @@ export default function MoreScreen() {
       <ScrollView contentContainerStyle={{ paddingBottom: 48 }}>
         <Title>Partners & reports</Title>
         <Subtitle>Shared school pot · this calendar month</Subtitle>
+
+        <Card>
+          <Text style={styles.section}>Quick actions</Text>
+          <Text style={styles.meta}>
+            {teachers.length} teacher{teachers.length === 1 ? '' : 's'} on login ·{' '}
+            {activeEmployees.length} employee{activeEmployees.length === 1 ? '' : 's'} on payroll
+          </Text>
+        </Card>
+
+        <PrimaryButton title="Add Teacher" onPress={() => router.push('/teachers/add')} />
+        <PrimaryButton title="Salaries" onPress={() => router.push('/salaries')} color="#6d28d9" />
+        <PrimaryButton
+          title="Money reports (Print / Share)"
+          onPress={() => router.push('/reports')}
+          color="#0f766e"
+        />
 
         <Card>
           <Text style={styles.section}>Money report (this month)</Text>
@@ -90,10 +109,24 @@ export default function MoreScreen() {
         </Card>
 
         <Card>
+          <Text style={styles.section}>Teachers on login</Text>
+          {teachers.map((t) => (
+            <View key={t.id} style={styles.partnerRow}>
+              <View style={[styles.dot, { backgroundColor: t.color }]} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.partnerName}>
+                  {t.name} ({t.label})
+                </Text>
+                <Text style={styles.meta}>Attendance only</Text>
+              </View>
+            </View>
+          ))}
+        </Card>
+
+        <Card>
           <Text style={styles.section}>School snapshot</Text>
           <Text style={styles.meta}>
-            {students.length} students · {partnerOnly.length} partners · teachers take attendance
-            only
+            {students.length} students · {partnerOnly.length} partners · {teachers.length} teachers
           </Text>
           <Text style={[styles.meta, { marginTop: 8 }]}>
             Finance rule: any partner may collect from any student and spend on any school

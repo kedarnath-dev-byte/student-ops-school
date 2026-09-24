@@ -280,7 +280,10 @@ function StatusPill({ status }: { status: string }) {
   };
   const c = colors[status] ?? colors.skipped;
   return (
-    <View style={[styles.pill, { backgroundColor: c.bg }]}>\n      <Text style={[styles.pillText, { color: c.fg }]}>{status}</Text>\n    </View>\n  );
+    <View style={[styles.pill, { backgroundColor: c.bg }]}>
+      <Text style={[styles.pillText, { color: c.fg }]}>{status}</Text>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({

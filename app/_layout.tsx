@@ -68,6 +68,10 @@ export default function RootLayout() {
           name="salaries/index"
           options={{ headerShown: true, title: 'Salaries' }}
         />
+        <Stack.Screen
+          name="whatsapp/settings"
+          options={{ headerShown: true, title: 'WhatsApp to parents' }}
+        />
       </Stack>
     </AuthGate>
   );

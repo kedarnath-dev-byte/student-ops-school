@@ -86,11 +86,29 @@ eas build -p android --profile preview
 
 - `name`: Student Ops  
 - `slug`: student-ops-school  
-- `android.package`: com.studentops.school  
+- `android.package`: com.studentops.school
 
 ## Reset demo data
 
 **More → Reset mock data to seed** clears local AsyncStorage state back to the 6 demo students + sample fees/expenses.
+
+
+## WhatsApp (Meta Cloud API)
+
+Automatic guardian messages for fee receipts, test scores, and absence alerts.
+
+1. Create a Meta app → add the **WhatsApp** product.
+2. In **WhatsApp → API Setup**, copy **Phone number ID** and a temporary (or permanent) access token.
+3. Add guardian numbers as allowed test recipients while the app is in development mode.
+4. In the app: **More → WhatsApp to parents** → paste Phone Number ID + token, set provider to **Meta Cloud**, enable, Save.
+5. Collect a fee (or add a test / mark absent) — a message is enqueued and sent automatically.
+
+**Notes**
+
+- This build sends free-form **text** messages (works inside the 24h customer-care window after a parent messages you, or on numbers Meta has approved for testing). Cold outbound needs Meta-approved **templates** — add a template send path later if needed.
+- **Demo only:** the access token is stored on-device in AsyncStorage. **Production:** move the token to a Supabase Edge Function or Render service; the client should only enqueue.
+- Swappable providers: implement `WhatsAppProvider` and register it in `src/whatsapp/providers/index.ts`. Use **Stub** for offline demo (marks sent locally, no API call).
+- Storage key bumped to `student-ops-school-v3` (includes `whatsappConfig` + `whatsappOutbox`).
 
 ## License
 

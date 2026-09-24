@@ -21,6 +21,8 @@ export default function MoreScreen() {
   const students = useMockStore((s) => s.students);
   const employees = useMockStore((s) => s.employees);
   const isTeacher = useMockStore((s) => s.isTeacher());
+  const whatsappOutbox = useMockStore((s) => s.whatsappOutbox);
+  const whatsappEnabled = useMockStore((s) => s.whatsappConfig.enabled);
 
   const fees = feeBy();
   const exps = expBy();
@@ -28,6 +30,11 @@ export default function MoreScreen() {
   const partnerOnly = partners.filter((p) => p.role === 'partner');
   const teachers = partners.filter((p) => p.role === 'teacher');
   const activeEmployees = employees.filter((e) => e.active);
+  const today = new Date().toISOString().slice(0, 10);
+  const waQueued = whatsappOutbox.filter((i) => i.status === 'queued').length;
+  const waSentToday = whatsappOutbox.filter(
+    (i) => i.status === 'sent' && (i.sentAt ?? i.createdAt).slice(0, 10) === today
+  ).length;
 
   if (isTeacher) {
     return (
@@ -73,6 +80,15 @@ export default function MoreScreen() {
           title="Money reports (Print / Share)"
           onPress={() => router.push('/reports')}
           color="#0f766e"
+        />
+        <PrimaryButton
+          title={
+            whatsappEnabled
+              ? `WhatsApp to parents · ${waQueued} queued · ${waSentToday} sent today`
+              : 'WhatsApp to parents (off)'
+          }
+          onPress={() => router.push('/whatsapp/settings')}
+          color="#128C7E"
         />
 
         <Card>

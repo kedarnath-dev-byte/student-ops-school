@@ -16,6 +16,7 @@ import type { ExpenseCategory, PaymentMethod } from '../../src/store/types';
 import { formatINR, formatDateTime, partnerName } from '../../src/lib/format';
 
 export default function ExpensesScreen() {
+  const isTeacher = useMockStore((s) => s.isTeacher());
   const partners = useMockStore((s) => s.partners);
   const expenses = useMockStore((s) => s.expenses);
   const addExpense = useMockStore((s) => s.addExpense);
@@ -34,6 +35,20 @@ export default function ExpensesScreen() {
       ),
     [expenses]
   );
+
+  if (isTeacher) {
+    return (
+      <Screen>
+        <Title>Expenses locked</Title>
+        <Subtitle>Teachers can only take attendance.</Subtitle>
+        <Card>
+          <Text style={{ color: '#64748b', lineHeight: 20 }}>
+            Switch to a Partner login to collect fees or record expenses.
+          </Text>
+        </Card>
+      </Screen>
+    );
+  }
 
   const submit = () => {
     if (!activePartnerId) {

@@ -86,7 +86,7 @@ eas build -p android --profile preview
 
 - `name`: Student Ops  
 - `slug`: student-ops-school  
-- `android.package`: com.studentops.school
+- `android.package`: com.studentops.school  
 
 ## Reset demo data
 

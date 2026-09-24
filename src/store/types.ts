@@ -4,6 +4,8 @@ export type PaymentMethod = 'cash' | 'upi' | 'bank';
 
 export type AttendanceStatus = 'present' | 'absent' | 'late';
 
+export type StaffRole = 'partner' | 'teacher';
+
 export type ExpenseCategory =
   | 'salaries'
   | 'rent'
@@ -14,34 +16,36 @@ export type ExpenseCategory =
   | 'food'
   | 'other';
 
+/** Partner = full access (fees/expenses). Teacher = attendance only. */
 export interface Partner {
   id: string;
   name: string;
-  label: string; // Partner A / B / C
+  label: string; // A / B / C / T
   color: string;
+  role: StaffRole;
 }
 
 export interface Student {
   id: string;
   name: string;
-  className: string; // e.g. "Class 5", "Nursery"
+  className: string;
   guardianName: string;
   guardianPhone: string;
-  admissionDate: string; // ISO date
+  admissionDate: string;
   monthlyFee: number;
   notes?: string;
   createdAt: string;
-  createdBy: string; // partner_id
+  createdBy: string;
 }
 
 export interface AttendanceRecord {
   id: string;
   studentId: string;
   className: string;
-  date: string; // YYYY-MM-DD
+  date: string;
   status: AttendanceStatus;
-  recordedBy: string; // partner_id
-  recordedAt: string; // ISO timestamp
+  recordedBy: string;
+  recordedAt: string;
   note?: string;
 }
 
@@ -51,8 +55,8 @@ export interface FeeCollection {
   amount: number;
   method: PaymentMethod;
   note?: string;
-  collectedBy: string; // partner_id — NEVER anonymous
-  collectedAt: string; // ISO timestamp
+  collectedBy: string;
+  collectedAt: string;
   voidedAt?: string | null;
   voidReason?: string | null;
 }
@@ -63,8 +67,8 @@ export interface Expense {
   category: ExpenseCategory;
   purpose: string;
   method: PaymentMethod;
-  spentBy: string; // partner_id — NEVER anonymous
-  spentAt: string; // ISO timestamp
+  spentBy: string;
+  spentAt: string;
   voidedAt?: string | null;
   voidReason?: string | null;
 }

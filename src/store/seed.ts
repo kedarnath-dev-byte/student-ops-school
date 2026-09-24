@@ -7,9 +7,16 @@ import type {
 } from './types';
 
 export const SEED_PARTNERS: Partner[] = [
-  { id: 'partner-a', name: 'Partner A', label: 'A', color: '#2563eb' },
-  { id: 'partner-b', name: 'Partner B', label: 'B', color: '#16a34a' },
-  { id: 'partner-c', name: 'Partner C', label: 'C', color: '#ca8a04' },
+  { id: 'partner-a', name: 'Partner A', label: 'A', color: '#2563eb', role: 'partner' },
+  { id: 'partner-b', name: 'Partner B', label: 'B', color: '#16a34a', role: 'partner' },
+  { id: 'partner-c', name: 'Partner C', label: 'C', color: '#ca8a04', role: 'partner' },
+  {
+    id: 'teacher-1',
+    name: 'Teacher',
+    label: 'T',
+    color: '#7c3aed',
+    role: 'teacher',
+  },
 ];
 
 const today = new Date();

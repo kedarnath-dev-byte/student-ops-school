@@ -11,14 +11,22 @@ export function PartnerBanner() {
   if (!partner) {
     return (
       <Pressable style={styles.warn} onPress={() => router.replace('/login')}>
-        <Text style={styles.warnText}>No partner selected — tap to login</Text>
+        <Text style={styles.warnText}>Not logged in — tap to choose partner or teacher</Text>
       </Pressable>
     );
   }
 
+  const roleLine =
+    partner.role === 'teacher'
+      ? `Teacher · attendance only`
+      : `Partner · full access`;
+
   return (
     <View style={[styles.banner, { backgroundColor: partner.color }]}>
-      <Text style={styles.text}>Acting as {partner.name}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.text}>{partner.name}</Text>
+        <Text style={styles.sub}>{roleLine}</Text>
+      </View>
       <Pressable onPress={() => router.push('/login')} hitSlop={12}>
         <Text style={styles.switch}>Switch</Text>
       </Pressable>
@@ -35,6 +43,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   text: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  sub: { color: 'rgba(255,255,255,0.9)', fontSize: 12, marginTop: 2 },
   switch: { color: '#fff', fontWeight: '600', textDecorationLine: 'underline' },
   warn: {
     backgroundColor: '#b45309',

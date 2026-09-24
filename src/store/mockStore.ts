@@ -20,7 +20,7 @@ import {
   SEED_STUDENTS,
 } from './seed';
 
-const STORAGE_KEY = 'student-ops-school-v0';
+const STORAGE_KEY = 'student-ops-school-v1';
 
 /** Avoid AsyncStorage touching `window` during Expo web SSR / Metro evaluate. */
 const memoryStorage = {
@@ -40,11 +40,20 @@ function uid(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function requirePartner(activePartnerId: string | null): string {
+function requireActor(activePartnerId: string | null): string {
   if (!activePartnerId) {
-    throw new Error('No active partner. Select a partner before recording money or attendance.');
+    throw new Error('No one logged in. Select a partner or teacher first.');
   }
   return activePartnerId;
+}
+
+function requirePartnerFinance(get: () => { activePartnerId: string | null; partners: { id: string; role: string }[] }): string {
+  const id = requireActor(get().activePartnerId);
+  const user = get().partners.find((p) => p.id === id);
+  if (!user || user.role !== 'partner') {
+    throw new Error('Teachers can only take attendance. Fee and expense access is for partners.');
+  }
+  return id;
 }
 
 interface MockStore {
@@ -61,6 +70,8 @@ interface MockStore {
   setActivePartner: (partnerId: string) => void;
   clearActivePartner: () => void;
   getActivePartner: () => Partner | null;
+  isTeacher: () => boolean;
+  isPartner: () => boolean;
 
   addStudent: (input: Omit<Student, 'id' | 'createdAt' | 'createdBy'>) => Student;
   updateStudent: (id: string, patch: Partial<Student>) => void;
@@ -134,8 +145,11 @@ export const useMockStore = create<MockStore>()(
         return partners.find((p) => p.id === activePartnerId) ?? null;
       },
 
+      isTeacher: () => get().getActivePartner()?.role === 'teacher',
+      isPartner: () => get().getActivePartner()?.role === 'partner',
+
       addStudent: (input) => {
-        const partnerId = requirePartner(get().activePartnerId);
+        const partnerId = requirePartnerFinance(get);
         const student: Student = {
           ...input,
           id: uid('stu'),
@@ -155,7 +169,7 @@ export const useMockStore = create<MockStore>()(
       getStudent: (id) => get().students.find((s) => s.id === id),
 
       upsertAttendance: (input) => {
-        const partnerId = requirePartner(get().activePartnerId);
+        const partnerId = requireActor(get().activePartnerId);
         const existing = get().attendance.find(
           (a) =>
             a.studentId === input.studentId &&
@@ -184,7 +198,7 @@ export const useMockStore = create<MockStore>()(
         get().attendance.filter((a) => a.className === className && a.date === date),
 
       collectFee: (input) => {
-        const partnerId = requirePartner(get().activePartnerId);
+        const partnerId = requirePartnerFinance(get);
         if (!input.amount || input.amount <= 0) throw new Error('Amount must be positive');
         const fee: FeeCollection = {
           id: uid('fee'),
@@ -202,7 +216,7 @@ export const useMockStore = create<MockStore>()(
       },
 
       voidFee: (id, reason) => {
-        const partnerId = requirePartner(get().activePartnerId);
+        const partnerId = requirePartnerFinance(get);
         if (!reason.trim()) throw new Error('Void reason required');
         set((s) => ({
           feeCollections: s.feeCollections.map((f) =>
@@ -218,7 +232,7 @@ export const useMockStore = create<MockStore>()(
       },
 
       addExpense: (input) => {
-        const partnerId = requirePartner(get().activePartnerId);
+        const partnerId = requirePartnerFinance(get);
         if (!input.amount || input.amount <= 0) throw new Error('Amount must be positive');
         if (!input.purpose.trim()) throw new Error('Purpose required');
         const expense: Expense = {
@@ -237,7 +251,7 @@ export const useMockStore = create<MockStore>()(
       },
 
       voidExpense: (id, reason) => {
-        const partnerId = requirePartner(get().activePartnerId);
+        const partnerId = requirePartnerFinance(get);
         if (!reason.trim()) throw new Error('Void reason required');
         set((s) => ({
           expenses: s.expenses.map((e) =>
@@ -253,7 +267,7 @@ export const useMockStore = create<MockStore>()(
       },
 
       addProgressNote: (studentId, note) => {
-        const partnerId = requirePartner(get().activePartnerId);
+        const partnerId = requirePartnerFinance(get);
         const pn: ProgressNote = {
           id: uid('pn'),
           studentId,

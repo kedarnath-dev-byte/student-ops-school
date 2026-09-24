@@ -4,23 +4,30 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
   AttendanceRecord,
   AttendanceStatus,
+  Employee,
   Expense,
   ExpenseCategory,
   FeeCollection,
   Partner,
   PaymentMethod,
   ProgressNote,
+  SalaryPayment,
   Student,
+  StudentTest,
 } from './types';
 import {
   SEED_ATTENDANCE,
+  SEED_EMPLOYEES,
   SEED_EXPENSES,
   SEED_FEES,
   SEED_PARTNERS,
+  SEED_SALARIES,
   SEED_STUDENTS,
+  SEED_TESTS,
+  TEACHER_COLORS,
 } from './seed';
 
-const STORAGE_KEY = 'student-ops-school-v1';
+const STORAGE_KEY = 'student-ops-school-v2';
 
 /** Avoid AsyncStorage touching `window` during Expo web SSR / Metro evaluate. */
 const memoryStorage = {
@@ -47,7 +54,10 @@ function requireActor(activePartnerId: string | null): string {
   return activePartnerId;
 }
 
-function requirePartnerFinance(get: () => { activePartnerId: string | null; partners: { id: string; role: string }[] }): string {
+function requirePartnerFinance(get: () => {
+  activePartnerId: string | null;
+  partners: { id: string; role: string }[];
+}): string {
   const id = requireActor(get().activePartnerId);
   const user = get().partners.find((p) => p.id === id);
   if (!user || user.role !== 'partner') {
@@ -64,6 +74,9 @@ interface MockStore {
   feeCollections: FeeCollection[];
   expenses: Expense[];
   progressNotes: ProgressNote[];
+  employees: Employee[];
+  salaryPayments: SalaryPayment[];
+  studentTests: StudentTest[];
   hydrated: boolean;
 
   setHydrated: (v: boolean) => void;
@@ -73,6 +86,7 @@ interface MockStore {
   isTeacher: () => boolean;
   isPartner: () => boolean;
 
+  addTeacher: (input: { name: string }) => Partner;
   addStudent: (input: Omit<Student, 'id' | 'createdAt' | 'createdBy'>) => Student;
   updateStudent: (id: string, patch: Partial<Student>) => void;
   getStudent: (id: string) => Student | undefined;
@@ -85,6 +99,7 @@ interface MockStore {
     note?: string;
   }) => AttendanceRecord;
   getAttendanceForClassDate: (className: string, date: string) => AttendanceRecord[];
+  getAttendanceForStudent: (studentId: string) => AttendanceRecord[];
 
   collectFee: (input: {
     studentId: string;
@@ -104,6 +119,30 @@ interface MockStore {
 
   addProgressNote: (studentId: string, note: string) => ProgressNote;
 
+  addEmployee: (input: {
+    name: string;
+    title?: string;
+    monthlySalary?: number;
+  }) => Employee;
+  recordSalary: (input: {
+    employeeId: string;
+    amount: number;
+    method: PaymentMethod;
+    periodLabel: string;
+    note?: string;
+  }) => SalaryPayment;
+  voidSalary: (id: string, reason: string) => void;
+
+  addStudentTest: (input: {
+    studentId: string;
+    testName: string;
+    scored: number;
+    maxMarks: number;
+    testedAt: string;
+    note?: string;
+  }) => StudentTest;
+  getTestsForStudent: (studentId: string) => StudentTest[];
+
   /** Active (non-voided) fee totals this calendar month, by partner */
   monthFeeTotalsByPartner: () => Record<string, number>;
   /** Active expense totals this calendar month, by partner */
@@ -118,6 +157,13 @@ function startOfMonthISO(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 }
 
+function nextTeacherLabel(partners: Partner[]): string {
+  const teacherCount = partners.filter((p) => p.role === 'teacher').length;
+  if (teacherCount === 0) return 'T';
+  if (teacherCount === 1) return 'T2';
+  return `T${teacherCount + 1}`;
+}
+
 export const useMockStore = create<MockStore>()(
   persist(
     (set, get) => ({
@@ -128,6 +174,9 @@ export const useMockStore = create<MockStore>()(
       feeCollections: SEED_FEES,
       expenses: SEED_EXPENSES,
       progressNotes: [],
+      employees: SEED_EMPLOYEES,
+      salaryPayments: SEED_SALARIES,
+      studentTests: SEED_TESTS,
       hydrated: false,
 
       setHydrated: (v) => set({ hydrated: v }),
@@ -148,6 +197,25 @@ export const useMockStore = create<MockStore>()(
       isTeacher: () => get().getActivePartner()?.role === 'teacher',
       isPartner: () => get().getActivePartner()?.role === 'partner',
 
+      addTeacher: (input) => {
+        const partnerId = requirePartnerFinance(get);
+        const name = input.name.trim();
+        if (!name) throw new Error('Teacher name required');
+        const partners = get().partners;
+        const label = nextTeacherLabel(partners);
+        const colorIndex = partners.filter((p) => p.role === 'teacher').length % TEACHER_COLORS.length;
+        const teacher: Partner = {
+          id: uid('teacher'),
+          name,
+          label,
+          color: TEACHER_COLORS[colorIndex],
+          role: 'teacher',
+        };
+        void partnerId;
+        set((s) => ({ partners: [...s.partners, teacher] }));
+        return teacher;
+      },
+
       addStudent: (input) => {
         const partnerId = requirePartnerFinance(get);
         const student: Student = {
@@ -161,6 +229,7 @@ export const useMockStore = create<MockStore>()(
       },
 
       updateStudent: (id, patch) => {
+        requirePartnerFinance(get);
         set((s) => ({
           students: s.students.map((st) => (st.id === id ? { ...st, ...patch, id: st.id } : st)),
         }));
@@ -196,6 +265,11 @@ export const useMockStore = create<MockStore>()(
 
       getAttendanceForClassDate: (className, date) =>
         get().attendance.filter((a) => a.className === className && a.date === date),
+
+      getAttendanceForStudent: (studentId) =>
+        [...get().attendance.filter((a) => a.studentId === studentId)].sort((a, b) =>
+          b.date.localeCompare(a.date)
+        ),
 
       collectFee: (input) => {
         const partnerId = requirePartnerFinance(get);
@@ -279,6 +353,92 @@ export const useMockStore = create<MockStore>()(
         return pn;
       },
 
+      addEmployee: (input) => {
+        const partnerId = requirePartnerFinance(get);
+        const name = input.name.trim();
+        if (!name) throw new Error('Employee name required');
+        const emp: Employee = {
+          id: uid('emp'),
+          name,
+          title: input.title?.trim() || undefined,
+          monthlySalary: input.monthlySalary,
+          createdAt: new Date().toISOString(),
+          createdBy: partnerId,
+          active: true,
+        };
+        set((s) => ({ employees: [...s.employees, emp] }));
+        return emp;
+      },
+
+      recordSalary: (input) => {
+        const partnerId = requirePartnerFinance(get);
+        if (!input.amount || input.amount <= 0) throw new Error('Amount must be positive');
+        if (!input.periodLabel.trim()) throw new Error('Period required (e.g. 2026-03)');
+        const emp = get().employees.find((e) => e.id === input.employeeId);
+        if (!emp) throw new Error('Employee not found');
+        const pay: SalaryPayment = {
+          id: uid('sal'),
+          employeeId: input.employeeId,
+          amount: input.amount,
+          method: input.method,
+          periodLabel: input.periodLabel.trim(),
+          note: input.note?.trim() || undefined,
+          paidBy: partnerId,
+          paidAt: new Date().toISOString(),
+          voidedAt: null,
+          voidReason: null,
+        };
+        set((s) => ({ salaryPayments: [...s.salaryPayments, pay] }));
+        return pay;
+      },
+
+      voidSalary: (id, reason) => {
+        const partnerId = requirePartnerFinance(get);
+        if (!reason.trim()) throw new Error('Void reason required');
+        set((s) => ({
+          salaryPayments: s.salaryPayments.map((p) =>
+            p.id === id
+              ? {
+                  ...p,
+                  voidedAt: new Date().toISOString(),
+                  voidReason: `${reason.trim()} (voided by ${partnerId})`,
+                }
+              : p
+          ),
+        }));
+      },
+
+      addStudentTest: (input) => {
+        const partnerId = requirePartnerFinance(get);
+        const testName = input.testName.trim();
+        if (!testName) throw new Error('Test name required');
+        if (input.maxMarks <= 0) throw new Error('Max marks must be positive');
+        if (input.scored < 0 || input.scored > input.maxMarks) {
+          throw new Error('Score must be between 0 and max marks');
+        }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(input.testedAt)) {
+          throw new Error('Date must be YYYY-MM-DD');
+        }
+        const t: StudentTest = {
+          id: uid('test'),
+          studentId: input.studentId,
+          testName,
+          scored: input.scored,
+          maxMarks: input.maxMarks,
+          testedAt: input.testedAt,
+          note: input.note?.trim() || undefined,
+          recordedBy: partnerId,
+          recordedAt: new Date().toISOString(),
+        };
+        set((s) => ({ studentTests: [...s.studentTests, t] }));
+        return t;
+      },
+
+      getTestsForStudent: (studentId) =>
+        [...get().studentTests.filter((t) => t.studentId === studentId)].sort((a, b) =>
+          b.testedAt.localeCompare(a.testedAt)
+        ),
+
       monthFeeTotalsByPartner: () => {
         const start = startOfMonthISO();
         const totals: Record<string, number> = {};
@@ -320,6 +480,9 @@ export const useMockStore = create<MockStore>()(
           feeCollections: SEED_FEES,
           expenses: SEED_EXPENSES,
           progressNotes: [],
+          employees: SEED_EMPLOYEES,
+          salaryPayments: SEED_SALARIES,
+          studentTests: SEED_TESTS,
         }),
     }),
     {
@@ -330,7 +493,6 @@ export const useMockStore = create<MockStore>()(
         if (error) {
           console.warn('mockStore rehydrate error', error);
         }
-        // Defer so persist middleware is not mid-write during SSR evaluate
         queueMicrotask(() => {
           useMockStore.setState({ hydrated: true });
         });
@@ -343,6 +505,9 @@ export const useMockStore = create<MockStore>()(
         feeCollections: s.feeCollections,
         expenses: s.expenses,
         progressNotes: s.progressNotes,
+        employees: s.employees,
+        salaryPayments: s.salaryPayments,
+        studentTests: s.studentTests,
       }),
     }
   )

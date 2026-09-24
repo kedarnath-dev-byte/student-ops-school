@@ -26,8 +26,20 @@ import {
   SEED_TESTS,
   TEACHER_COLORS,
 } from './seed';
+import {
+  DEFAULT_WHATSAPP_CONFIG,
+  type WhatsAppConfig,
+  type WhatsAppOutboxItem,
+} from '../whatsapp/types';
+import { enqueueAndMaybeSend, flushOutbox } from '../whatsapp/dispatch';
+import {
+  buildAbsenceAlertMessage,
+  buildFeeReceiptMessage,
+  buildTestProgressMessage,
+} from '../whatsapp/templates';
+import { formatDate } from '../lib/format';
 
-const STORAGE_KEY = 'student-ops-school-v2';
+const STORAGE_KEY = 'student-ops-school-v3';
 
 /** Avoid AsyncStorage touching `window` during Expo web SSR / Metro evaluate. */
 const memoryStorage = {
@@ -77,6 +89,8 @@ interface MockStore {
   employees: Employee[];
   salaryPayments: SalaryPayment[];
   studentTests: StudentTest[];
+  whatsappConfig: WhatsAppConfig;
+  whatsappOutbox: WhatsAppOutboxItem[];
   hydrated: boolean;
 
   setHydrated: (v: boolean) => void;
@@ -143,6 +157,10 @@ interface MockStore {
   }) => StudentTest;
   getTestsForStudent: (studentId: string) => StudentTest[];
 
+  updateWhatsAppConfig: (patch: Partial<WhatsAppConfig>) => void;
+  flushWhatsAppOutbox: () => Promise<{ attempted: number; sent: number; failed: number }>;
+  sendWhatsAppTestToFirstGuardian: () => Promise<WhatsAppOutboxItem | null>;
+
   /** Active (non-voided) fee totals this calendar month, by partner */
   monthFeeTotalsByPartner: () => Record<string, number>;
   /** Active expense totals this calendar month, by partner */
@@ -166,7 +184,37 @@ function nextTeacherLabel(partners: Partner[]): string {
 
 export const useMockStore = create<MockStore>()(
   persist(
-    (set, get) => ({
+    (set, get) => {
+      const pushOutboxItem = (item: WhatsAppOutboxItem) => {
+        set((s) => ({
+          whatsappOutbox: [item, ...s.whatsappOutbox].slice(0, 200),
+        }));
+      };
+
+      const updateOutboxItem = (id: string, patch: Partial<WhatsAppOutboxItem>) => {
+        set((s) => ({
+          whatsappOutbox: s.whatsappOutbox.map((i) =>
+            i.id === id ? { ...i, ...patch } : i
+          ),
+        }));
+      };
+
+      const enqueueDeps = () => ({
+        getConfig: () => get().whatsappConfig,
+        pushItem: pushOutboxItem,
+        updateItem: updateOutboxItem,
+      });
+
+      /** Fire-and-forget WhatsApp enqueue; never blocks store mutations. */
+      const fireEnqueue = (
+        args: Parameters<typeof enqueueAndMaybeSend>[0]
+      ): void => {
+        void enqueueAndMaybeSend(args, enqueueDeps()).catch(() => {
+          // Swallow — outbox already holds failure if any
+        });
+      };
+
+      return {
       partners: SEED_PARTNERS,
       activePartnerId: null,
       students: SEED_STUDENTS,
@@ -177,6 +225,8 @@ export const useMockStore = create<MockStore>()(
       employees: SEED_EMPLOYEES,
       salaryPayments: SEED_SALARIES,
       studentTests: SEED_TESTS,
+      whatsappConfig: { ...DEFAULT_WHATSAPP_CONFIG },
+      whatsappOutbox: [],
       hydrated: false,
 
       setHydrated: (v) => set({ hydrated: v }),
@@ -245,6 +295,7 @@ export const useMockStore = create<MockStore>()(
             a.date === input.date &&
             a.className === input.className
         );
+        const previousStatus = existing?.status;
         const record: AttendanceRecord = {
           id: existing?.id ?? uid('att'),
           studentId: input.studentId,
@@ -260,6 +311,25 @@ export const useMockStore = create<MockStore>()(
             ? s.attendance.map((a) => (a.id === existing.id ? record : a))
             : [...s.attendance, record],
         }));
+
+        // Notify parent only when status changes TO absent (teachers included)
+        if (input.status === 'absent' && previousStatus !== 'absent') {
+          const student = get().students.find((s) => s.id === input.studentId);
+          if (student) {
+            fireEnqueue({
+              studentId: student.id,
+              guardianPhoneRaw: student.guardianPhone,
+              kind: 'absence_alert',
+              body: buildAbsenceAlertMessage({
+                studentName: student.name,
+                className: input.className,
+                date: input.date,
+              }),
+              meta: { date: input.date, className: input.className },
+            });
+          }
+        }
+
         return record;
       },
 
@@ -286,6 +356,25 @@ export const useMockStore = create<MockStore>()(
           voidReason: null,
         };
         set((s) => ({ feeCollections: [...s.feeCollections, fee] }));
+
+        const student = get().students.find((s) => s.id === input.studentId);
+        const collector = get().partners.find((p) => p.id === partnerId);
+        if (student) {
+          fireEnqueue({
+            studentId: student.id,
+            guardianPhoneRaw: student.guardianPhone,
+            kind: 'fee_receipt',
+            body: buildFeeReceiptMessage({
+              studentName: student.name,
+              amount: fee.amount,
+              method: fee.method,
+              date: formatDate(fee.collectedAt),
+              collectedByName: collector?.name ?? partnerId,
+            }),
+            meta: { amount: fee.amount, method: fee.method, feeId: fee.id },
+          });
+        }
+
         return fee;
       },
 
@@ -431,6 +520,24 @@ export const useMockStore = create<MockStore>()(
           recordedAt: new Date().toISOString(),
         };
         set((s) => ({ studentTests: [...s.studentTests, t] }));
+
+        const student = get().students.find((s) => s.id === input.studentId);
+        if (student) {
+          fireEnqueue({
+            studentId: student.id,
+            guardianPhoneRaw: student.guardianPhone,
+            kind: 'test_progress',
+            body: buildTestProgressMessage({
+              studentName: student.name,
+              testName: t.testName,
+              scored: t.scored,
+              maxMarks: t.maxMarks,
+              date: t.testedAt,
+            }),
+            meta: { testId: t.id, scored: t.scored, maxMarks: t.maxMarks },
+          });
+        }
+
         return t;
       },
 
@@ -438,6 +545,45 @@ export const useMockStore = create<MockStore>()(
         [...get().studentTests.filter((t) => t.studentId === studentId)].sort((a, b) =>
           b.testedAt.localeCompare(a.testedAt)
         ),
+
+      updateWhatsAppConfig: (patch) => {
+        requirePartnerFinance(get);
+        set((s) => ({
+          whatsappConfig: { ...s.whatsappConfig, ...patch },
+        }));
+      },
+
+      flushWhatsAppOutbox: async () => {
+        requirePartnerFinance(get);
+        return flushOutbox(
+          () => get().whatsappConfig,
+          get().whatsappOutbox,
+          updateOutboxItem
+        );
+      },
+
+      sendWhatsAppTestToFirstGuardian: async () => {
+        requirePartnerFinance(get);
+        const student = get().students[0];
+        if (!student) return null;
+        const partner = get().getActivePartner();
+        return enqueueAndMaybeSend(
+          {
+            studentId: student.id,
+            guardianPhoneRaw: student.guardianPhone,
+            kind: 'fee_receipt',
+            body: buildFeeReceiptMessage({
+              studentName: student.name,
+              amount: 1,
+              method: 'cash',
+              date: formatDate(new Date().toISOString()),
+              collectedByName: partner?.name ?? 'Partner',
+            }),
+            meta: { testSend: 1 },
+          },
+          enqueueDeps()
+        );
+      },
 
       monthFeeTotalsByPartner: () => {
         const start = startOfMonthISO();
@@ -483,8 +629,11 @@ export const useMockStore = create<MockStore>()(
           employees: SEED_EMPLOYEES,
           salaryPayments: SEED_SALARIES,
           studentTests: SEED_TESTS,
+          whatsappConfig: { ...DEFAULT_WHATSAPP_CONFIG },
+          whatsappOutbox: [],
         }),
-    }),
+      };
+    },
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(getPersistStorage),
@@ -508,6 +657,8 @@ export const useMockStore = create<MockStore>()(
         employees: s.employees,
         salaryPayments: s.salaryPayments,
         studentTests: s.studentTests,
+        whatsappConfig: s.whatsappConfig,
+        whatsappOutbox: s.whatsappOutbox,
       }),
     }
   )

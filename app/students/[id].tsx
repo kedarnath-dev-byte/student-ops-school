@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, Text, StyleSheet, Alert, View } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import {
@@ -29,6 +29,7 @@ export default function StudentDetailScreen() {
   const addStudentTest = useMockStore((s) => s.addStudentTest);
   const getTestsForStudent = useMockStore((s) => s.getTestsForStudent);
   const getAttendanceForStudent = useMockStore((s) => s.getAttendanceForStudent);
+  const updateStudent = useMockStore((s) => s.updateStudent);
   const isPartner = useMockStore((s) => s.isPartner());
   const isTeacher = useMockStore((s) => s.isTeacher());
 
@@ -37,6 +38,14 @@ export default function StudentDetailScreen() {
   const [scored, setScored] = useState('');
   const [maxMarks, setMaxMarks] = useState('20');
   const [testedAt, setTestedAt] = useState(todayISO());
+  const [guardianNameEdit, setGuardianNameEdit] = useState('');
+  const [guardianPhoneEdit, setGuardianPhoneEdit] = useState('');
+
+  useEffect(() => {
+    if (!student) return;
+    setGuardianNameEdit(student.guardianName);
+    setGuardianPhoneEdit(student.guardianPhone);
+  }, [student?.id, student?.guardianName, student?.guardianPhone]);
 
   if (!student) {
     return (
@@ -98,6 +107,22 @@ export default function StudentDetailScreen() {
     }
   };
 
+  const saveGuardian = () => {
+    if (!isPartner) {
+      Alert.alert('Partners only', 'Only partners can edit guardian contact.');
+      return;
+    }
+    try {
+      updateStudent(student.id, {
+        guardianName: guardianNameEdit.trim(),
+        guardianPhone: guardianPhoneEdit.trim(),
+      });
+      Alert.alert('Saved', 'Guardian contact updated.');
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
   const shareFees = () => {
     const lines: string[] = [
       `Fee ledger — ${student.name} (${student.className})`,
@@ -136,6 +161,29 @@ export default function StudentDetailScreen() {
           </Text>
           {student.notes ? <Text style={styles.meta}>{student.notes}</Text> : null}
         </Card>
+
+        {isPartner ? (
+          <>
+            <Title>Guardian contact</Title>
+            <Card>
+              <Label>Guardian name</Label>
+              <Field
+                value={guardianNameEdit}
+                onChangeText={setGuardianNameEdit}
+                placeholder="Parent / guardian"
+              />
+              <Label>Guardian phone</Label>
+              <Field
+                value={guardianPhoneEdit}
+                onChangeText={setGuardianPhoneEdit}
+                placeholder="10-digit mobile"
+                keyboardType="phone-pad"
+                autoCapitalize="none"
+              />
+            </Card>
+            <PrimaryButton title="Save guardian contact" onPress={saveGuardian} />
+          </>
+        ) : null}
 
         {!isTeacher ? (
           <>

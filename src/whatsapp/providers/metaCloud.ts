@@ -1,5 +1,15 @@
 import type { WhatsAppProvider } from '../types';
 
+type MetaApiError = {
+  message?: string;
+  type?: string;
+  code?: number;
+  error_data?: { messaging_product?: string; details?: string };
+  error_user_title?: string;
+  error_user_msg?: string;
+  fbtrace_id?: string;
+};
+
 /**
  * Meta WhatsApp Cloud API text sender.
  * Demo: token lives in client config — production must move token to
@@ -39,15 +49,11 @@ export const metaCloudProvider: WhatsAppProvider = {
 
       const json = (await res.json().catch(() => ({}))) as {
         messages?: { id?: string }[];
-        error?: { message?: string; error_user_msg?: string };
+        error?: MetaApiError;
       };
 
       if (!res.ok) {
-        const msg =
-          json.error?.error_user_msg ||
-          json.error?.message ||
-          `Meta API HTTP ${res.status}`;
-        return { ok: false, error: msg };
+        return { ok: false, error: formatMetaError(json.error, res.status) };
       }
 
       const messageId = json.messages?.[0]?.id;
@@ -61,3 +67,26 @@ export const metaCloudProvider: WhatsAppProvider = {
     }
   },
 };
+
+function formatMetaError(error: MetaApiError | undefined, httpStatus: number): string {
+  const code = error?.code;
+  const details =
+    error?.error_data?.details ||
+    error?.error_user_msg ||
+    error?.message ||
+    `Meta API HTTP ${httpStatus}`;
+
+  if (code === 131030) {
+    return (
+      `(#131030) Recipient not on Meta allow list. In Developers → WhatsApp → ` +
+      `Try it out → Manage phone number list, add this guardian number, then retry. ` +
+      `(${details})`
+    );
+  }
+
+  if (code != null) {
+    return `(#${code}) ${details}`;
+  }
+
+  return details;
+}

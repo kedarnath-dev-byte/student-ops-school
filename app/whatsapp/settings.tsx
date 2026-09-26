@@ -21,6 +21,7 @@ import {
 import { useMockStore } from '../../src/store/mockStore';
 import type { WhatsAppProviderId } from '../../src/whatsapp/types';
 import { templateKindLabel } from '../../src/whatsapp/templates';
+import { normalizeCountryCode, normalizeIndiaPhone } from '../../src/whatsapp/phone';
 import { formatDateTime } from '../../src/lib/format';
 
 export default function WhatsAppSettingsScreen() {
@@ -42,6 +43,38 @@ export default function WhatsAppSettingsScreen() {
   const [accessToken, setAccessToken] = useState(config.metaAccessToken);
   const [apiVersion, setApiVersion] = useState(config.metaApiVersion);
   const [busy, setBusy] = useState(false);
+
+  const countryCodeDigits = countryCode.replace(/\D/g, '');
+  const countryCodeInvalid = countryCodeDigits.length > 3;
+
+  const previewNormalized = useMemo(() => {
+    const first = students[0];
+    if (!first?.guardianPhone) return null;
+    const cc = countryCodeInvalid ? '91' : normalizeCountryCode(countryCode);
+    return normalizeIndiaPhone(first.guardianPhone, cc);
+  }, [students, countryCode, countryCodeInvalid]);
+
+  const assertCountryCodeOk = (): boolean => {
+    if (countryCodeInvalid) {
+      Alert.alert(
+        'Invalid country code',
+        'Country code must be 1–3 digits only (e.g. 91). Do not paste a Phone Number ID or the Meta +1 test number into this field. Use 91 for India.'
+      );
+      return false;
+    }
+    return true;
+  };
+
+  const persistConfig = () => {
+    updateWhatsAppConfig({
+      enabled,
+      provider,
+      defaultCountryCode: normalizeCountryCode(countryCode),
+      metaPhoneNumberId: phoneNumberId.trim(),
+      metaAccessToken: accessToken.trim(),
+      metaApiVersion: apiVersion.trim() || 'v21.0',
+    });
+  };
 
   useEffect(() => {
     if (!isPartner) {
@@ -75,15 +108,9 @@ export default function WhatsAppSettingsScreen() {
   }
 
   const save = () => {
+    if (!assertCountryCodeOk()) return;
     try {
-      updateWhatsAppConfig({
-        enabled,
-        provider,
-        defaultCountryCode: countryCode.replace(/\D/g, '') || '91',
-        metaPhoneNumberId: phoneNumberId.trim(),
-        metaAccessToken: accessToken.trim(),
-        metaApiVersion: apiVersion.trim() || 'v21.0',
-      });
+      persistConfig();
       Alert.alert('Saved', 'WhatsApp settings updated.');
     } catch (e) {
       Alert.alert('Error', e instanceof Error ? e.message : 'Could not save');
@@ -91,17 +118,11 @@ export default function WhatsAppSettingsScreen() {
   };
 
   const sendTest = async () => {
+    if (!assertCountryCodeOk()) return;
     setBusy(true);
     try {
       // Persist current form first so test uses latest values
-      updateWhatsAppConfig({
-        enabled,
-        provider,
-        defaultCountryCode: countryCode.replace(/\D/g, '') || '91',
-        metaPhoneNumberId: phoneNumberId.trim(),
-        metaAccessToken: accessToken.trim(),
-        metaApiVersion: apiVersion.trim() || 'v21.0',
-      });
+      persistConfig();
       const item = await sendWhatsAppTestToFirstGuardian();
       if (!item) {
         Alert.alert('No students', 'Add a student first.');
@@ -121,16 +142,10 @@ export default function WhatsAppSettingsScreen() {
   };
 
   const retryQueued = async () => {
+    if (!assertCountryCodeOk()) return;
     setBusy(true);
     try {
-      updateWhatsAppConfig({
-        enabled,
-        provider,
-        defaultCountryCode: countryCode.replace(/\D/g, '') || '91',
-        metaPhoneNumberId: phoneNumberId.trim(),
-        metaAccessToken: accessToken.trim(),
-        metaApiVersion: apiVersion.trim() || 'v21.0',
-      });
+      persistConfig();
       const result = await flushWhatsAppOutbox();
       Alert.alert(
         'Retry done',
@@ -192,6 +207,10 @@ export default function WhatsAppSettingsScreen() {
             placeholder="91"
             autoCapitalize="none"
           />
+          <Text style={[styles.help, { marginBottom: 8 }]}>
+            Country code is ONLY e.g. 91 — never paste Phone Number ID or the +1
+            Meta test number into this field.
+          </Text>
           <Label>Phone Number ID</Label>
           <Field
             value={phoneNumberId}
@@ -219,11 +238,19 @@ export default function WhatsAppSettingsScreen() {
           />
           <Text style={[styles.help, { marginTop: 10 }]}>
             Meta Business Suite → WhatsApp → API Setup: copy Phone number ID and
-            a token. Add guardian numbers as test recipients in Meta while in
-            development. Cold outbound outside the 24h window needs approved
+            a token into the fields above (not into Country code). Sandbox /
+            development: Developers → WhatsApp → Try it out → Manage phone number
+            list — add each guardian number to the allow list or Meta returns
+            (#131030). Cold outbound outside the 24h window needs approved
             message templates; this build sends free-form text (works after the
             parent messages first, or switch to template API later).
           </Text>
+          {previewNormalized ? (
+            <Text style={[styles.help, { marginTop: 8 }]}>
+              Preview (first student): will send to {previewNormalized}
+              {countryCodeInvalid ? ' (using 91 until you fix country code)' : ''}
+            </Text>
+          ) : null}
           <Text style={[styles.help, { marginTop: 8, color: '#b45309' }]}>
             Demo only: token is stored on-device. Production should move the
             token to a Supabase Edge Function / Render; the app should only

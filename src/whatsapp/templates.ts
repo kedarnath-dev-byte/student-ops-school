@@ -63,6 +63,8 @@ export function templateKindLabel(kind: WhatsAppTemplateKind): string {
       return 'Test progress';
     case 'absence_alert':
       return 'Absence alert';
+    case 'connection_test':
+      return 'Connection test';
     default:
       return kind;
   }

@@ -3,6 +3,7 @@ import { normalizeIndiaPhone } from './phone';
 import type {
   WhatsAppConfig,
   WhatsAppOutboxItem,
+  WhatsAppTemplateComponent,
   WhatsAppTemplateKind,
 } from './types';
 
@@ -21,6 +22,15 @@ export type EnqueueArgs = {
   kind: WhatsAppTemplateKind;
   body: string;
   meta?: Record<string, string | number>;
+  /**
+   * When set, send via Meta template API instead of free-form text.
+   * Use for cold outbound / connection tests (e.g. hello_world / en_US).
+   */
+  template?: {
+    name: string;
+    languageCode: string;
+    components?: WhatsAppTemplateComponent[];
+  };
 };
 
 export type EnqueueDeps = {
@@ -83,7 +93,15 @@ export async function enqueueAndMaybeSend(
     body: args.body,
     status: 'queued',
     createdAt,
-    meta: args.meta,
+    meta: {
+      ...args.meta,
+      ...(args.template
+        ? {
+            templateName: args.template.name,
+            templateLang: args.template.languageCode,
+          }
+        : {}),
+    },
   };
   deps.pushItem(queued);
 
@@ -92,25 +110,50 @@ export async function enqueueAndMaybeSend(
       status: 'failed',
       error: 'Configure Meta Phone Number ID and token in More → WhatsApp',
     });
-    return { ...queued, status: 'failed', error: 'Configure Meta Phone Number ID and token in More → WhatsApp' };
+    return {
+      ...queued,
+      status: 'failed',
+      error: 'Configure Meta Phone Number ID and token in More → WhatsApp',
+    };
   }
 
-  return sendOne(queued, config, deps.updateItem);
+  return sendOne(queued, config, deps.updateItem, args.template);
 }
 
 async function sendOne(
   item: WhatsAppOutboxItem,
   config: WhatsAppConfig,
-  updateItem: (id: string, patch: Partial<WhatsAppOutboxItem>) => void
+  updateItem: (id: string, patch: Partial<WhatsAppOutboxItem>) => void,
+  template?: EnqueueArgs['template']
 ): Promise<WhatsAppOutboxItem> {
   updateItem(item.id, { status: 'sending', error: undefined });
 
   const provider = getProvider(config.provider);
-  const result = await provider.sendText({
-    toE164Digits: item.guardianPhone,
-    body: item.body,
-    config,
-  });
+
+  // Prefer explicit template arg; else recover from outbox meta (retry flush)
+  const tpl =
+    template ??
+    (typeof item.meta?.templateName === 'string' &&
+    typeof item.meta?.templateLang === 'string'
+      ? {
+          name: item.meta.templateName,
+          languageCode: item.meta.templateLang,
+        }
+      : undefined);
+
+  const result = tpl
+    ? await provider.sendTemplate({
+        toE164Digits: item.guardianPhone,
+        name: tpl.name,
+        languageCode: tpl.languageCode,
+        components: tpl.components,
+        config,
+      })
+    : await provider.sendText({
+        toE164Digits: item.guardianPhone,
+        body: item.body,
+        config,
+      });
 
   if (result.ok) {
     const patch: Partial<WhatsAppOutboxItem> = {

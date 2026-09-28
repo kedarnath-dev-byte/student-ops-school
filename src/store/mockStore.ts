@@ -33,6 +33,10 @@ import {
 } from '../whatsapp/types';
 import { enqueueAndMaybeSend, flushOutbox } from '../whatsapp/dispatch';
 import {
+  META_TEST_TEMPLATE_LANG,
+  META_TEST_TEMPLATE_NAME,
+} from '../whatsapp/types';
+import {
   buildAbsenceAlertMessage,
   buildFeeReceiptMessage,
   buildTestProgressMessage,
@@ -566,20 +570,19 @@ export const useMockStore = create<MockStore>()(
         requirePartnerFinance(get);
         const student = get().students[0];
         if (!student) return null;
-        const partner = get().getActivePartner();
+        // Cold outbound must use Meta-approved template (same as Try it out).
+        // Free-form text often returns message id but never delivers outside 24h window.
         return enqueueAndMaybeSend(
           {
             studentId: student.id,
             guardianPhoneRaw: student.guardianPhone,
-            kind: 'fee_receipt',
-            body: buildFeeReceiptMessage({
-              studentName: student.name,
-              amount: 1,
-              method: 'cash',
-              date: formatDate(new Date().toISOString()),
-              collectedByName: partner?.name ?? 'Partner',
-            }),
+            kind: 'connection_test',
+            body: `[template:${META_TEST_TEMPLATE_NAME}/${META_TEST_TEMPLATE_LANG}] Connection test to ${student.name}'s guardian`,
             meta: { testSend: 1 },
+            template: {
+              name: META_TEST_TEMPLATE_NAME,
+              languageCode: META_TEST_TEMPLATE_LANG,
+            },
           },
           enqueueDeps()
         );

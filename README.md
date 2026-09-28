@@ -105,7 +105,9 @@ Automatic guardian messages for fee receipts, test scores, and absence alerts.
 
 **Notes**
 
-- This build sends free-form **text** messages (works inside the 24h customer-care window after a parent messages you, or on numbers Meta has approved for testing). Cold outbound needs Meta-approved **templates** — add a template send path later if needed.
+- **Send test** uses Meta's default template `hello_world` / `en_US` (same as Developers → WhatsApp → Try it out) so delivery works outside the 24h window.
+- Fee / test / absence still send free-form **text** (needs an open customer-care window after a parent messages you). Meta errors are shown in full in the outbox.
+- `WhatsAppProvider` supports `sendText` and `sendTemplate` (name, language code, optional components).
 - **Demo only:** the access token is stored on-device in AsyncStorage. **Production:** move the token to a Supabase Edge Function or Render service; the client should only enqueue.
 - Swappable providers: implement `WhatsAppProvider` and register it in `src/whatsapp/providers/index.ts`. Use **Stub** for offline demo (marks sent locally, no API call).
 - Storage key bumped to `student-ops-school-v3` (includes `whatsappConfig` + `whatsappOutbox`).

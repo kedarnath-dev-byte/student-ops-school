@@ -241,9 +241,12 @@ export default function WhatsAppSettingsScreen() {
             a token into the fields above (not into Country code). Sandbox /
             development: Developers → WhatsApp → Try it out → Manage phone number
             list — add each guardian number to the allow list or Meta returns
-            (#131030). Cold outbound outside the 24h window needs approved
-            message templates; this build sends free-form text (works after the
-            parent messages first, or switch to template API later).
+            (#131030). Send test uses Meta default template hello_world
+            (language en_US) — same as Try it out — so delivery works outside
+            the 24h window. Fee / test / absence still send free-form text
+            (needs an open customer-care window); if Meta rejects those, the
+            outbox shows the full error body. Approve your own templates in
+            Meta for cold fee/test/absence later.
           </Text>
           {previewNormalized ? (
             <Text style={[styles.help, { marginTop: 8 }]}>
@@ -287,6 +290,12 @@ export default function WhatsAppSettingsScreen() {
                   {studentName(item.studentId)} · {item.guardianPhone || '—'}
                 </Text>
                 <Text style={styles.meta}>{formatDateTime(item.createdAt)}</Text>
+                {item.meta?.templateName ? (
+                  <Text style={styles.meta}>
+                    Template: {String(item.meta.templateName)}/
+                    {String(item.meta.templateLang ?? '')}
+                  </Text>
+                ) : null}
                 {item.error ? <Text style={styles.err}>{item.error}</Text> : null}
               </View>
             ))

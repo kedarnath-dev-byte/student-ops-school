@@ -6,6 +6,11 @@ import type {
   WhatsAppTemplateComponent,
   WhatsAppTemplateKind,
 } from './types';
+import {
+  resolveTemplateForKind,
+  shouldUseMetaTemplate,
+  templateAcceptsBodyVars,
+} from './types';
 
 function uid(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -25,6 +30,8 @@ export type EnqueueArgs = {
   /**
    * When set, send via Meta template API instead of free-form text.
    * Use for cold outbound / connection tests (e.g. hello_world / en_US).
+   * For meta_cloud with useFreeFormText=false, templates are auto-resolved
+   * from config even if this is omitted.
    */
   template?: {
     name: string;
@@ -40,8 +47,53 @@ export type EnqueueDeps = {
 };
 
 /**
+ * Pick template for send: explicit arg → outbox meta → auto from config (meta_cloud).
+ * hello_world never gets body-var components (template has none).
+ */
+function resolveTemplate(
+  kind: WhatsAppTemplateKind,
+  config: WhatsAppConfig,
+  itemMeta: WhatsAppOutboxItem['meta'] | undefined,
+  explicit?: EnqueueArgs['template']
+): EnqueueArgs['template'] | undefined {
+  if (explicit) {
+    return stripHelloWorldComponents(explicit);
+  }
+
+  if (
+    typeof itemMeta?.templateName === 'string' &&
+    typeof itemMeta?.templateLang === 'string'
+  ) {
+    return stripHelloWorldComponents({
+      name: itemMeta.templateName,
+      languageCode: itemMeta.templateLang,
+    });
+  }
+
+  if (shouldUseMetaTemplate(config)) {
+    const resolved = resolveTemplateForKind(kind, config);
+    return stripHelloWorldComponents({
+      name: resolved.name,
+      languageCode: resolved.languageCode,
+    });
+  }
+
+  return undefined;
+}
+
+function stripHelloWorldComponents(
+  tpl: NonNullable<EnqueueArgs['template']>
+): NonNullable<EnqueueArgs['template']> {
+  if (!templateAcceptsBodyVars(tpl.name)) {
+    return { name: tpl.name, languageCode: tpl.languageCode };
+  }
+  return tpl;
+}
+
+/**
  * Normalize, push to outbox, and attempt send when enabled + credentials ready.
  * Never throws; never logs access token.
+ * Plaintext `body` is always kept in the outbox for audit even when sending a template.
  */
 export async function enqueueAndMaybeSend(
   args: EnqueueArgs,
@@ -85,6 +137,9 @@ export async function enqueueAndMaybeSend(
     return item;
   }
 
+  // Auto-attach Meta template for fee/test/absence/connection when not free-form
+  const resolvedTpl = resolveTemplate(args.kind, config, args.meta, args.template);
+
   const queued: WhatsAppOutboxItem = {
     id,
     studentId: args.studentId,
@@ -95,10 +150,10 @@ export async function enqueueAndMaybeSend(
     createdAt,
     meta: {
       ...args.meta,
-      ...(args.template
+      ...(resolvedTpl
         ? {
-            templateName: args.template.name,
-            templateLang: args.template.languageCode,
+            templateName: resolvedTpl.name,
+            templateLang: resolvedTpl.languageCode,
           }
         : {}),
     },
@@ -117,7 +172,7 @@ export async function enqueueAndMaybeSend(
     };
   }
 
-  return sendOne(queued, config, deps.updateItem, args.template);
+  return sendOne(queued, config, deps.updateItem, resolvedTpl);
 }
 
 async function sendOne(
@@ -130,16 +185,18 @@ async function sendOne(
 
   const provider = getProvider(config.provider);
 
-  // Prefer explicit template arg; else recover from outbox meta (retry flush)
-  const tpl =
-    template ??
-    (typeof item.meta?.templateName === 'string' &&
-    typeof item.meta?.templateLang === 'string'
-      ? {
-          name: item.meta.templateName,
-          languageCode: item.meta.templateLang,
-        }
-      : undefined);
+  const tpl = resolveTemplate(item.kind, config, item.meta, template);
+
+  // Persist resolved template onto outbox meta for audit / retry visibility
+  if (tpl && (!item.meta?.templateName || !item.meta?.templateLang)) {
+    updateItem(item.id, {
+      meta: {
+        ...item.meta,
+        templateName: tpl.name,
+        templateLang: tpl.languageCode,
+      },
+    });
+  }
 
   const result = tpl
     ? await provider.sendTemplate({

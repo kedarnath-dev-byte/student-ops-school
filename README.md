@@ -105,8 +105,10 @@ Automatic guardian messages for fee receipts, test scores, and absence alerts.
 
 **Notes**
 
-- **Send test** uses Meta's default template `hello_world` / `en_US` (same as Developers → WhatsApp → Try it out) so delivery works outside the 24h window.
-- Fee / test / absence still send free-form **text** (needs an open customer-care window after a parent messages you). Meta errors are shown in full in the outbox.
+- **All student alerts** (fee receipt, test progress, absence) and **Send test** use Meta templates via `sendTemplate`, defaulting to `hello_world` / `en_US` (same as Developers → WhatsApp → Try it out) so delivery works in sandbox before custom templates are approved.
+- Optional config / Settings fields: `templateFee`, `templateTest`, `templateAbsence`, `templateLanguage` — override once you create named templates with body vars in Meta. When the template is `hello_world`, body vars are ignored (template has none); plaintext body is still stored in the outbox for audit.
+- Free-form text (`sendText`) only when `useFreeFormText` is true (default **false** for Meta). Needs an open 24h customer-care window.
+- Meta errors are shown in full in the outbox.
 - `WhatsAppProvider` supports `sendText` and `sendTemplate` (name, language code, optional components).
 - **Demo only:** the access token is stored on-device in AsyncStorage. **Production:** move the token to a Supabase Edge Function or Render service; the client should only enqueue.
 - Swappable providers: implement `WhatsAppProvider` and register it in `src/whatsapp/providers/index.ts`. Use **Stub** for offline demo (marks sent locally, no API call).

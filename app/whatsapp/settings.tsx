@@ -20,6 +20,10 @@ import {
 } from '../../src/components/ui';
 import { useMockStore } from '../../src/store/mockStore';
 import type { WhatsAppProviderId } from '../../src/whatsapp/types';
+import {
+  META_TEST_TEMPLATE_LANG,
+  META_TEST_TEMPLATE_NAME,
+} from '../../src/whatsapp/types';
 import { templateKindLabel } from '../../src/whatsapp/templates';
 import { normalizeCountryCode, normalizeIndiaPhone } from '../../src/whatsapp/phone';
 import { formatDateTime } from '../../src/lib/format';
@@ -42,6 +46,21 @@ export default function WhatsAppSettingsScreen() {
   const [phoneNumberId, setPhoneNumberId] = useState(config.metaPhoneNumberId);
   const [accessToken, setAccessToken] = useState(config.metaAccessToken);
   const [apiVersion, setApiVersion] = useState(config.metaApiVersion);
+  const [templateFee, setTemplateFee] = useState(
+    config.templateFee ?? META_TEST_TEMPLATE_NAME
+  );
+  const [templateTest, setTemplateTest] = useState(
+    config.templateTest ?? META_TEST_TEMPLATE_NAME
+  );
+  const [templateAbsence, setTemplateAbsence] = useState(
+    config.templateAbsence ?? META_TEST_TEMPLATE_NAME
+  );
+  const [templateLanguage, setTemplateLanguage] = useState(
+    config.templateLanguage ?? META_TEST_TEMPLATE_LANG
+  );
+  const [useFreeFormText, setUseFreeFormText] = useState(
+    Boolean(config.useFreeFormText)
+  );
   const [busy, setBusy] = useState(false);
 
   const countryCodeDigits = countryCode.replace(/\D/g, '');
@@ -73,6 +92,11 @@ export default function WhatsAppSettingsScreen() {
       metaPhoneNumberId: phoneNumberId.trim(),
       metaAccessToken: accessToken.trim(),
       metaApiVersion: apiVersion.trim() || 'v21.0',
+      templateFee: templateFee.trim() || META_TEST_TEMPLATE_NAME,
+      templateTest: templateTest.trim() || META_TEST_TEMPLATE_NAME,
+      templateAbsence: templateAbsence.trim() || META_TEST_TEMPLATE_NAME,
+      templateLanguage: templateLanguage.trim() || META_TEST_TEMPLATE_LANG,
+      useFreeFormText,
     });
   };
 
@@ -91,6 +115,11 @@ export default function WhatsAppSettingsScreen() {
     setPhoneNumberId(config.metaPhoneNumberId);
     setAccessToken(config.metaAccessToken);
     setApiVersion(config.metaApiVersion);
+    setTemplateFee(config.templateFee ?? META_TEST_TEMPLATE_NAME);
+    setTemplateTest(config.templateTest ?? META_TEST_TEMPLATE_NAME);
+    setTemplateAbsence(config.templateAbsence ?? META_TEST_TEMPLATE_NAME);
+    setTemplateLanguage(config.templateLanguage ?? META_TEST_TEMPLATE_LANG);
+    setUseFreeFormText(Boolean(config.useFreeFormText));
   }, [config]);
 
   const recent = useMemo(() => outbox.slice(0, 30), [outbox]);
@@ -241,12 +270,12 @@ export default function WhatsAppSettingsScreen() {
             a token into the fields above (not into Country code). Sandbox /
             development: Developers → WhatsApp → Try it out → Manage phone number
             list — add each guardian number to the allow list or Meta returns
-            (#131030). Send test uses Meta default template hello_world
-            (language en_US) — same as Try it out — so delivery works outside
-            the 24h window. Fee / test / absence still send free-form text
-            (needs an open customer-care window); if Meta rejects those, the
-            outbox shows the full error body. Approve your own templates in
-            Meta for cold fee/test/absence later.
+            (#131030). Student alerts (fee / test / absence) and the connection
+            test all send via Meta templates (default hello_world / en_US) so
+            delivery works today in sandbox before you create custom templates.
+            Plaintext body is kept in the outbox for audit; hello_world has no
+            body variables so those are ignored. If Meta rejects a send, the
+            outbox shows the full error body.
           </Text>
           {previewNormalized ? (
             <Text style={[styles.help, { marginTop: 8 }]}>
@@ -259,6 +288,55 @@ export default function WhatsAppSettingsScreen() {
             token to a Supabase Edge Function / Render; the app should only
             enqueue.
           </Text>
+        </Card>
+
+        <Card>
+          <Text style={styles.section}>Message templates</Text>
+          <Text style={[styles.help, { marginBottom: 10 }]}>
+            Student alerts use Meta templates (default hello_world). Optional:
+            override names below once you create and Meta-approve custom
+            templates with body variables.
+          </Text>
+          <View style={styles.rowBetween}>
+            <Text style={styles.sectionSoft}>Use free-form text</Text>
+            <Switch value={useFreeFormText} onValueChange={setUseFreeFormText} />
+          </View>
+          <Text style={[styles.help, { marginBottom: 10 }]}>
+            Off by default for Meta. Turn on only if parents message first (24h
+            window) and you want plaintext instead of templates.
+          </Text>
+          <Label>Language code</Label>
+          <Field
+            value={templateLanguage}
+            onChangeText={setTemplateLanguage}
+            placeholder={META_TEST_TEMPLATE_LANG}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Label>Fee receipt template</Label>
+          <Field
+            value={templateFee}
+            onChangeText={setTemplateFee}
+            placeholder={META_TEST_TEMPLATE_NAME}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Label>Test progress template</Label>
+          <Field
+            value={templateTest}
+            onChangeText={setTemplateTest}
+            placeholder={META_TEST_TEMPLATE_NAME}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Label>Absence alert template</Label>
+          <Field
+            value={templateAbsence}
+            onChangeText={setTemplateAbsence}
+            placeholder={META_TEST_TEMPLATE_NAME}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
         </Card>
 
         <PrimaryButton title="Save" onPress={save} disabled={busy} color="#128C7E" />
@@ -324,6 +402,7 @@ function StatusPill({ status }: { status: string }) {
 
 const styles = StyleSheet.create({
   section: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 8 },
+  sectionSoft: { fontSize: 15, fontWeight: '700', color: '#0f172a' },
   help: { color: '#64748b', fontSize: 13, lineHeight: 18 },
   rowBetween: {
     flexDirection: 'row',

@@ -28,14 +28,11 @@ import {
 } from './seed';
 import {
   DEFAULT_WHATSAPP_CONFIG,
+  resolveTemplateForKind,
   type WhatsAppConfig,
   type WhatsAppOutboxItem,
 } from '../whatsapp/types';
 import { enqueueAndMaybeSend, flushOutbox } from '../whatsapp/dispatch';
-import {
-  META_TEST_TEMPLATE_LANG,
-  META_TEST_TEMPLATE_NAME,
-} from '../whatsapp/types';
 import {
   buildAbsenceAlertMessage,
   buildFeeReceiptMessage,
@@ -570,18 +567,20 @@ export const useMockStore = create<MockStore>()(
         requirePartnerFinance(get);
         const student = get().students[0];
         if (!student) return null;
+        const config = get().whatsappConfig;
         // Cold outbound must use Meta-approved template (same as Try it out).
         // Free-form text often returns message id but never delivers outside 24h window.
+        const tpl = resolveTemplateForKind('connection_test', config);
         return enqueueAndMaybeSend(
           {
             studentId: student.id,
             guardianPhoneRaw: student.guardianPhone,
             kind: 'connection_test',
-            body: `[template:${META_TEST_TEMPLATE_NAME}/${META_TEST_TEMPLATE_LANG}] Connection test to ${student.name}'s guardian`,
+            body: `[template:${tpl.name}/${tpl.languageCode}] Connection test to ${student.name}'s guardian`,
             meta: { testSend: 1 },
             template: {
-              name: META_TEST_TEMPLATE_NAME,
-              languageCode: META_TEST_TEMPLATE_LANG,
+              name: tpl.name,
+              languageCode: tpl.languageCode,
             },
           },
           enqueueDeps()

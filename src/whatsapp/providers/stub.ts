@@ -8,4 +8,9 @@ export const stubProvider: WhatsAppProvider = {
     const messageId = `stub-${Date.now()}-${toE164Digits.slice(-4)}`;
     return { ok: true, messageId };
   },
+
+  async sendTemplate({ toE164Digits, name, languageCode }) {
+    const messageId = `stub-tpl-${name}-${languageCode}-${Date.now()}-${toE164Digits.slice(-4)}`;
+    return { ok: true, messageId };
+  },
 };
